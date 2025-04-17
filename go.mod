@@ -1,4 +1,4 @@
-module github.com/OrkhanAlikhanov/sentrygin
+module github.com/OrkhanAlikhanov/sentrygin-without-tracing
 
 go 1.21
 
