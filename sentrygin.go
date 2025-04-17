@@ -2,7 +2,6 @@ package sentrygin
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -19,9 +18,6 @@ const (
 
 	// valuesKey is used as a key to store the Sentry Hub instance on the gin.Context.
 	valuesKey = "sentry"
-
-	// transactionKey is used as a key to store the Sentry transaction on the gin.Context.
-	transactionKey = "sentry_transaction"
 )
 
 type handler struct {
@@ -67,40 +63,8 @@ func (h *handler) handle(c *gin.Context) {
 		client.SetSDKIdentifier(sdkIdentifier)
 	}
 
-	transactionName := c.Request.URL.Path
-	transactionSource := sentry.SourceURL
-
-	if fp := c.FullPath(); fp != "" {
-		transactionName = fp
-		transactionSource = sentry.SourceRoute
-	}
-
-	options := []sentry.SpanOption{
-		sentry.ContinueTrace(hub, c.GetHeader(sentry.SentryTraceHeader), c.GetHeader(sentry.SentryBaggageHeader)),
-		sentry.WithOpName("http.server"),
-		sentry.WithTransactionSource(transactionSource),
-		sentry.WithSpanOrigin(sentry.SpanOriginGin),
-	}
-
-	transaction := sentry.StartTransaction(
-		sentry.SetHubOnContext(ctx, hub),
-		fmt.Sprintf("%s %s", c.Request.Method, transactionName),
-		options...,
-	)
-
-	transaction.SetData("http.request.method", c.Request.Method)
-
-	defer func() {
-		status := c.Writer.Status()
-		transaction.Status = sentry.HTTPtoSpanStatus(status)
-		transaction.SetData("http.response.status_code", status)
-		transaction.Finish()
-	}()
-
-	c.Request = c.Request.WithContext(transaction.Context())
 	hub.Scope().SetRequest(c.Request)
 	c.Set(valuesKey, hub)
-	c.Set(transactionKey, transaction)
 	defer h.recoverWithSentry(hub, c.Request)
 
 	c.Next()
@@ -149,15 +113,4 @@ func GetHubFromContext(ctx *gin.Context) *sentry.Hub {
 // SetHubOnContext sets *sentry.Hub instance to gin.Context.
 func SetHubOnContext(ctx *gin.Context, hub *sentry.Hub) {
 	ctx.Set(valuesKey, hub)
-}
-
-// GetSpanFromContext retrieves attached *sentry.Span instance from gin.Context.
-// If there is no transaction on echo.Context, it will return nil.
-func GetSpanFromContext(ctx *gin.Context) *sentry.Span {
-	if span, ok := ctx.Get(transactionKey); ok {
-		if span, ok := span.(*sentry.Span); ok {
-			return span
-		}
-	}
-	return nil
 }
